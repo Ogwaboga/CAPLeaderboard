@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CAP Element Leaderboard</title>
+    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        h2 { color: #1a73e8; }
+        table { border-collapse: collapse; width: 90%; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        th { background-color: #f4f4f4; }
+        tr.top1 { background-color: gold; }
+        tr.top2 { background-color: silver; }
+        tr.top3 { background-color: #cd7f32; }
+        button { padding: 10px 20px; font-size: 16px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+<h2>CAP Element Leaderboard</h2>
+<button onclick="loginAndLoad()">Login & Load Leaderboard</button>
+<div id="leaderboard"></div>
+
+<script>
+    // -------------------------
+    // 1. MSAL Configuration
+    // -------------------------
+    const msalConfig = {
+        auth: {
+            clientId: "9abd8a50-4417-4947-a8d7-23202cae83cc", // Replace with Azure App Client ID
+            authority: "https://login.microsoftonline.com/37ea5259-d47c-4bc5-859e-340fc5d617ae", // Replace with Tenant ID
+            redirectUri: window.location.origin // This will work for GitHub Pages
+        }
+    };
+
+    const msalInstance = new msal.PublicClientApplication(msalConfig);
+
+    let accessToken = null;
+
+    // -------------------------
+    // 2. Login & Get Token
+    // -------------------------
+    async function loginAndLoad() {
+        try {
+            const loginResponse = await msalInstance.loginPopup({
+                scopes: ["Files.Read", "Sites.Read.All"]
+            });
+            accessToken = loginResponse.accessToken;
+            console.log("Access Token:", accessToken);
+
+            // Initial load
+            await loadLeaderboard();
+
+            // Auto-refresh every 1 minute
+            setInterval(loadLeaderboard, 60000);
+
+        } catch (err) {
+            console.error("Login failed:", err);
+            alert("Login failed. Check console for details.");
+        }
+    }
+
+    // -------------------------
+    // 3. Fetch Excel Table
+    // -------------------------
+    async function loadLeaderboard() {
+        if (!accessToken) return;
+
+        // Replace this URL with your Excel table path from OneDrive or SharePoint
+        const excelEndpoint = "https://graph.microsoft.com/v1.0/me/drive/root:/Leaderboard.xlsx:/workbook/tables/Leaderboard/rows";
+
+        try {
+            const response = await fetch(excelEndpoint, {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            const data = await response.json();
+
+            const elements = data.value.map(row => ({
+                element: row.values[0][0],
+                AE_Leadership: parseInt(row.values[0][1]),
+                Drill: parseInt(row.values[0][2]),
+                PRB: parseInt(row.values[0][3]),
+                Attendance: parseInt(row.values[0][4]),
+                Emails: parseInt(row.values[0][5]),
+                Promotion: parseInt(row.values[0][6]),
+                total: row.values[0].slice(1).reduce((sum, val) => sum + parseInt(val), 0)
+            }));
+
+            // Sort descending by total points
+            elements.sort((a, b) => b.total - a.total);
+
+            displayLeaderboard(elements);
+
+        } catch (err) {
+            console.error("Error fetching Excel data:", err);
+            alert("Failed to fetch Excel data. Check console for details.");
+        }
+    }
+
+    // -------------------------
+    // 4. Display Leaderboard
+    // -------------------------
+    function displayLeaderboard(elements) {
+        let html = `<table>
+            <tr>
+                <th>Rank</th>
+                <th>Element</th>
+                <th>Total Points</th>
+                <th>AE/Leadership</th>
+                <th>Drill</th>
+                <th>PRB</th>
+                <th>Attendance</th>
+                <th>Emails</th>
+                <th>Promotion</th>
+            </tr>`;
+
+        elements.forEach((el, index) => {
+            let rowClass = "";
+            if (index === 0) rowClass = "top1";
+            else if (index === 1) rowClass = "top2";
+            else if (index === 2) rowClass = "top3";
+
+            html += `<tr class="${rowClass}">
+                <td>${index + 1}</td>
+                <td>${el.element}</td>
+                <td>${el.total}</td>
+                <td>${el.AE_Leadership}</td>
+                <td>${el.Drill}</td>
+                <td>${el.PRB}</td>
+                <td>${el.Attendance}</td>
+                <td>${el.Emails}</td>
+                <td>${el.Promotion}</td>
+            </tr>`;
+        });
+
+        html += `</table>`;
+        document.getElementById("leaderboard").innerHTML = html;
+    }
+</script>
+
+</body>
+</html>
